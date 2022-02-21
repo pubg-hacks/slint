@@ -313,7 +313,7 @@ struct RoundedRectangle {
 fn prepare_scene(
     runtime_window: Rc<i_slint_core::window::Window>,
     size: PhysicalSize,
-    devices: &dyn Devices,
+    devices: &mut dyn Devices,
     cache: &mut PartialRenderingCache,
 ) -> Scene {
     let prepare_scene_profiler = profiler::Timer::new(devices);

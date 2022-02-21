@@ -54,8 +54,14 @@ impl Timer {
         }
     }
 
-    pub fn stop_profiling(self, _devices: &dyn Devices, _context: &'static str) {
+    pub fn stop_profiling(self, _devices: &mut dyn Devices, _context: &'static str) {
         #[cfg(slint_debug_performance)]
-        i_slint_core::debug_log!("{} took: {}ms", _context, self.elapsed(_devices).as_millis())
+        i_slint_core::debug_log!("{} took: {}ms", _context, self.elapsed(_devices).as_millis());
+        #[cfg(all(slint_debug_performance, not(feature = "std")))]
+        _devices.debug(&alloc::format!(
+            "{} took {}ms",
+            _context,
+            self.elapsed(_devices).as_millis()
+        ));
     }
 }
