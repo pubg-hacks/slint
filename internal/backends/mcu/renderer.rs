@@ -18,7 +18,7 @@ use i_slint_core::item_rendering::{ItemRenderer, PartialRenderingCache};
 use i_slint_core::textlayout::TextParagraphLayout;
 use i_slint_core::{Color, ImageInner, StaticTextures};
 
-type DirtyRegion = PhysicalRect;
+pub type DirtyRegion = PhysicalRect;
 
 pub fn render_window_frame(
     runtime_window: Rc<i_slint_core::window::Window>,
@@ -31,59 +31,48 @@ pub fn render_window_frame(
 
     let mut line_processing_profiler = profiler::Timer::new_stopped();
     let mut span_drawing_profiler = profiler::Timer::new_stopped();
-    let mut screen_fill_profiler = profiler::Timer::new_stopped();
+    //let mut screen_fill_profiler = profiler::Timer::new_stopped();
 
-    let mut line_buffer = vec![background; size.width as usize];
     let dirty_region = scene.dirty_region;
 
     debug_assert!(scene.current_line >= dirty_region.origin.y_length());
     while scene.current_line < dirty_region.origin.y_length() + dirty_region.size.height_length() {
-        line_buffer.fill(background);
         span_drawing_profiler.start(devices);
-        for span in scene.items[0..scene.current_items_index].iter().rev() {
-            debug_assert!(scene.current_line >= span.pos.y_length());
-            debug_assert!(scene.current_line < span.pos.y_length() + span.size.height_length(),);
-            match span.command {
-                SceneCommand::Rectangle { color } => {
-                    TargetPixel::blend_buffer(
-                        &mut line_buffer[span.pos.x as usize
-                            ..(span.pos.x_length() + span.size.width_length()).get() as usize],
-                        color,
-                    );
-                }
-                SceneCommand::Texture { texture_index } => {
-                    let texture = &scene.textures[texture_index as usize];
-                    draw_functions::draw_texture_line(
-                        span,
-                        scene.current_line,
-                        texture,
-                        &mut line_buffer,
-                    );
-                }
-                SceneCommand::RoundedRectangle { rectangle_index } => {
-                    let rr = &scene.rounded_rectangles[rectangle_index as usize];
-                    draw_functions::draw_rounded_rectangle_line(
-                        span,
-                        scene.current_line,
-                        rr,
-                        &mut line_buffer,
-                    );
+        devices.render_line(scene.current_line, dirty_region, &mut |line_buffer| {
+            line_buffer[dirty_region.min_x() as _ .. dirty_region.max_x() as _].fill(background);
+            for span in scene.items[0..scene.current_items_index].iter().rev() {
+                debug_assert!(scene.current_line >= span.pos.y_length());
+                debug_assert!(scene.current_line < span.pos.y_length() + span.size.height_length(),);
+                match span.command {
+                    SceneCommand::Rectangle { color } => {
+                        TargetPixel::blend_buffer(
+                            &mut line_buffer[span.pos.x as usize
+                                ..(span.pos.x_length() + span.size.width_length()).get() as usize],
+                            color,
+                        );
+                    }
+                    SceneCommand::Texture { texture_index } => {
+                        let texture = &scene.textures[texture_index as usize];
+                        draw_functions::draw_texture_line(
+                            span,
+                            scene.current_line,
+                            texture,
+                            line_buffer,
+                        );
+                    }
+                    SceneCommand::RoundedRectangle { rectangle_index } => {
+                        let rr = &scene.rounded_rectangles[rectangle_index as usize];
+                        draw_functions::draw_rounded_rectangle_line(
+                            span,
+                            scene.current_line,
+                            rr,
+                            line_buffer,
+                        );
+                    }
                 }
             }
-        }
+        });
         span_drawing_profiler.stop(devices);
-        screen_fill_profiler.start(devices);
-        devices.fill_region(
-            euclid::rect(
-                dirty_region.origin.x,
-                scene.current_line.get() as i16,
-                dirty_region.size.width,
-                1,
-            ),
-            &line_buffer[dirty_region.origin.x as usize
-                ..(dirty_region.origin.x + dirty_region.size.width) as usize],
-        );
-        screen_fill_profiler.stop(devices);
         line_processing_profiler.start(devices);
         if scene.current_line < dirty_region.origin.y_length() + dirty_region.size.height_length() {
             scene.next_line();
@@ -93,7 +82,7 @@ pub fn render_window_frame(
 
     line_processing_profiler.stop_profiling(devices, "line processing");
     span_drawing_profiler.stop_profiling(devices, "span drawing");
-    screen_fill_profiler.stop_profiling(devices, "screen fill");
+    //screen_fill_profiler.stop_profiling(devices, "screen fill");
 }
 
 struct Scene {

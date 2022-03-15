@@ -84,3 +84,6 @@ panic = "abort"
 
 [profile.dev]
 panic = "abort"
+
+[patch.crates-io]
+rp2040-hal = { path="/home/rust/crates/rp-hal/rp2040-hal" }

@@ -9,6 +9,7 @@
 extern crate alloc;
 
 use alloc::boxed::Box;
+use alloc::vec;
 use core::cell::RefCell;
 use embedded_graphics::prelude::*;
 
@@ -37,7 +38,15 @@ pub type TargetPixel = embedded_graphics::pixelcolor::Rgb565;
 
 pub trait Devices {
     fn screen_size(&self) -> PhysicalSize;
-    fn fill_region(&mut self, region: PhysicalRect, pixels: &[TargetPixel]);
+    /// Call the fill_line function with a buffer of `self.screen_size().width`.
+    /// The parts within the dirty_region will be filled by the FnMut.
+    /// this function should then send the buffer to the screen.
+    fn render_line(
+        &mut self,
+        line: PhysicalLength,
+        dirty_region: renderer::DirtyRegion,
+        fill_buffer: &mut dyn FnMut(&mut [TargetPixel]),
+    );
     fn read_touch_event(&mut self) -> Option<i_slint_core::input::MouseEvent> {
         None
     }
@@ -57,14 +66,21 @@ where
         PhysicalSize::new(s.width as i16, s.height as i16)
     }
 
-    fn fill_region(&mut self, region: PhysicalRect, pixels: &[TargetPixel]) {
+    fn render_line(
+        &mut self,
+        line: PhysicalLength,
+        dirty_region: renderer::DirtyRegion,
+        fill_buffer: &mut dyn FnMut(&mut [TargetPixel]),
+    ) {
+        let mut buffer = vec![TargetPixel::default(); self.screen_size().width as usize];
+        fill_buffer(&mut buffer);
         self.color_converted()
             .fill_contiguous(
                 &embedded_graphics::primitives::Rectangle::new(
-                    Point::new(region.origin.x as i32, region.origin.y as i32),
-                    Size::new(region.size.width as u32, region.size.height as u32),
+                    Point::new(dirty_region.origin.x as i32, line.get() as i32),
+                    Size::new(dirty_region.size.width as u32, 1),
                 ),
-                pixels.iter().copied(),
+                buffer.into_iter().skip(dirty_region.origin.x as usize),
             )
             .unwrap()
     }
