@@ -169,9 +169,7 @@ impl CachedImage {
     pub fn new_from_resource(resource: &ImageInner) -> Option<Self> {
         match resource {
             ImageInner::None => None,
-            ImageInner::AbsoluteFilePath(path) => Self::new_from_path(path),
-            ImageInner::EmbeddedData { data, format } => Self::new_from_data(data, format),
-            ImageInner::EmbeddedImage(buffer) => {
+            ImageInner::EmbeddedImage { buffer, .. } => {
                 Some(Self(RefCell::new(ImageData::EmbeddedImage(buffer.clone()))))
             }
             ImageInner::StaticTextures { .. } => todo!(),
@@ -470,15 +468,6 @@ impl ImageCacheKey {
     pub fn new(resource: &ImageInner) -> Option<Self> {
         Some(match resource {
             ImageInner::None => return None,
-            ImageInner::AbsoluteFilePath(path) => {
-                if path.is_empty() {
-                    return None;
-                }
-                path.clone().into()
-            }
-            ImageInner::EmbeddedData { data, format: _ } => {
-                by_address::ByAddress(data.as_slice()).into()
-            }
             ImageInner::EmbeddedImage { .. } => return None,
             ImageInner::StaticTextures { .. } => return None,
         })

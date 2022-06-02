@@ -480,10 +480,7 @@ impl PrepareScene {
         let image_inner: &ImageInner = source.into();
         match image_inner {
             ImageInner::None => (),
-            ImageInner::AbsoluteFilePath(_) | ImageInner::EmbeddedData { .. } => {
-                unimplemented!()
-            }
-            ImageInner::EmbeddedImage(_) => todo!(),
+            ImageInner::EmbeddedImage { .. } => todo!(),
             ImageInner::StaticTextures(StaticTextures { size, data, textures, .. }) => {
                 let phys_size = geom.size_length().cast() * self.scale_factor;
                 let sx = phys_size.width / (size.width as f32);

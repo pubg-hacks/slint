@@ -298,7 +298,7 @@ impl i_slint_core::backend::Backend for Backend {
             let inner: &ImageInner = _image.into();
             match inner {
                 i_slint_core::ImageInner::None => Default::default(),
-                i_slint_core::ImageInner::EmbeddedImage(buffer) => buffer.size(),
+                i_slint_core::ImageInner::EmbeddedImage { buffer, .. } => buffer.size(),
                 _ => qt_window::load_image_from_resource(inner, None, ImageFit::fill)
                     .map(|img| {
                         let qsize = img.size();

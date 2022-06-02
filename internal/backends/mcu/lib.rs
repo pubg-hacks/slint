@@ -444,10 +444,7 @@ mod the_backend {
             let inner: &ImageInner = image.into();
             match inner {
                 ImageInner::None => Default::default(),
-                ImageInner::AbsoluteFilePath(_) | ImageInner::EmbeddedData { .. } => {
-                    unimplemented!()
-                }
-                ImageInner::EmbeddedImage(buffer) => buffer.size(),
+                ImageInner::EmbeddedImage { buffer, .. } => buffer.size(),
                 ImageInner::StaticTextures(StaticTextures { original_size, .. }) => *original_size,
             }
         }
