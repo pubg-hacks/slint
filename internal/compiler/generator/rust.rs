@@ -121,7 +121,7 @@ pub fn generate(doc: &Document) -> TokenStream {
     let sub_compos = llr
         .sub_components
         .iter()
-        .map(|sub_compo| generate_sub_component(sub_compo, &llr, None, quote!(), None))
+        .map(|sub_compo| generate_sub_component(sub_compo, &llr, None, quote!(), None, false))
         .collect::<Vec<_>>();
 
     let compo = generate_public_component(&llr);
@@ -520,6 +520,7 @@ fn generate_sub_component(
     parent_ctx: Option<ParentCtx>,
     extra_fields: TokenStream,
     index_property: Option<llr::PropertyIndex>,
+    pinned_drop: bool,
 ) -> TokenStream {
     let inner_component_id = inner_component_id(component);
 
@@ -667,6 +668,19 @@ fn generate_sub_component(
         repeated_element_components.push(rep_inner_component_id);
     }
 
+    let mut accessible_role_branch = vec![];
+    let mut accessible_string_property_branch = vec![];
+    for ((index, what), expr) in &component.accessible_prop {
+        let expr = compile_expression(&expr.borrow(), &ctx);
+        if what == "Role" {
+            accessible_role_branch.push(quote!(#index => #expr,));
+        } else {
+            let what = ident(&what);
+            accessible_string_property_branch
+                .push(quote!((#index, AccessibleStringProperty::#what) => #expr,));
+        }
+    }
+
     let mut sub_component_names: Vec<Ident> = vec![];
     let mut sub_component_types: Vec<Ident> = vec![];
 
@@ -716,6 +730,25 @@ fn generate_sub_component(
                 #repeater_offset..=#last_repeater => {
                     #sub_compo_field.apply_pin(_self).subtree_component(dyn_index - #repeater_offset, subtree_index, result)
                 }
+            ));
+        }
+
+        let sub_items_count = sub.ty.child_item_count();
+        let local_tree_index = local_tree_index as usize;
+        accessible_role_branch.push(quote!(
+            #local_tree_index => #sub_compo_field.apply_pin(_self).accessible_role(0),
+        ));
+        accessible_string_property_branch.push(quote!(
+            (#local_tree_index, _) => #sub_compo_field.apply_pin(_self).accessible_string_property(0, what),
+        ));
+        if sub_items_count > 1 {
+            let range_begin = local_index_of_first_child as usize;
+            let range_end = range_begin + sub_items_count - 2;
+            accessible_role_branch.push(quote!(
+                #range_begin..=#range_end => #sub_compo_field.apply_pin(_self).accessible_role(index - #range_begin + 1),
+            ));
+            accessible_string_property_branch.push(quote!(
+                (#range_begin..=#range_end, _) => #sub_compo_field.apply_pin(_self).accessible_string_property(index - #range_begin + 1, what),
             ));
         }
 
@@ -776,11 +809,13 @@ fn generate_sub_component(
         quote!(core::usize::MAX)
     };
 
+    let pin_macro = if pinned_drop { quote!(#[pin_drop]) } else { quote!(#[pin]) };
+
     quote!(
         #[derive(slint::re_exports::FieldOffsets, Default)]
         #[const_field_offset(slint::re_exports::const_field_offset)]
         #[repr(C)]
-        #[pin]
+        #pin_macro
         #visibility
         struct #inner_component_id {
             #(#item_names : slint::re_exports::#item_types,)*
@@ -862,6 +897,31 @@ fn generate_sub_component(
                 use slint::re_exports::*;
                 let _self = self;
                 #subtree_index_function
+            }
+
+            fn accessible_role(self: ::core::pin::Pin<&Self>, index: usize) -> slint::re_exports::AccessibleRole {
+                #![allow(unused)]
+                use slint::re_exports::*;
+                let _self = self;
+                match index {
+                    #(#accessible_role_branch)*
+                    //#(#forward_sub_ranges => #forward_sub_field.apply_pin(_self).accessible_role())*
+                    _ => AccessibleRole::default(),
+                }
+            }
+
+            fn accessible_string_property(
+                self: ::core::pin::Pin<&Self>,
+                index: usize,
+                what: slint::re_exports::AccessibleStringProperty,
+            ) -> slint::re_exports::SharedString {
+                #![allow(unused)]
+                use slint::re_exports::*;
+                let _self = self;
+                match (index, what) {
+                    #(#accessible_string_property_branch)*
+                    _ => Default::default(),
+                }
             }
         }
 
@@ -998,6 +1058,7 @@ fn generate_item_tree(
         parent_ctx.clone(),
         extra_fields,
         index_property,
+        true,
     );
     let inner_component_id = self::inner_component_id(&sub_tree.root);
     let parent_component_type = parent_ctx.iter().map(|parent| {
@@ -1069,8 +1130,10 @@ fn generate_item_tree(
             let children_count = node.children.len() as u32;
             let children_index = children_offset as u32;
             let item_array_len = item_array.len() as u32;
+            let is_accessible = node.is_accessible;
             item_tree_array.push(quote!(
-                slint::re_exports::ItemTreeNode::Item{
+                slint::re_exports::ItemTreeNode::Item {
+                    is_accessible: #is_accessible,
                     children_count: #children_count,
                     children_index: #children_index,
                     parent_index: #parent_index,
@@ -1186,6 +1249,19 @@ fn generate_item_tree(
 
             fn layout_info(self: ::core::pin::Pin<&Self>, orientation: slint::re_exports::Orientation) -> slint::re_exports::LayoutInfo {
                 self.layout_info(orientation)
+            }
+
+            fn accessible_role(self: ::core::pin::Pin<&Self>, index: usize) -> slint::re_exports::AccessibleRole {
+                self.accessible_role(index)
+            }
+
+            fn accessible_string_property(
+                self: ::core::pin::Pin<&Self>,
+                index: usize,
+                what: slint::re_exports::AccessibleStringProperty,
+                result: &mut slint::re_exports::SharedString,
+            ) {
+                *result = self.accessible_string_property(index, what);
             }
         }
 
